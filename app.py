@@ -39,6 +39,7 @@ def process():
     target_sum = request.form["target_sum"]
     tolerance = request.form["tolerance"]
 
+    # Convert user input to correct types
     try:
         max_combination_size = int(max_combination_size)
         target_sum = float(target_sum)
@@ -51,11 +52,44 @@ def process():
     if selected_column not in df.columns:
         return "Invalid column selection", 400
 
+    # Read static constraints from the form
+    constraint_columns = request.form.getlist("constraint_column[]")
+    constraint_operators = request.form.getlist("constraint_operator[]")
+    constraint_values = request.form.getlist("constraint_value[]")
+
+    # Apply constraints dynamically
+    for col, op, val in zip(constraint_columns, constraint_operators, constraint_values):
+        if col and val:
+            try:
+                val = float(val) if val.replace('.', '', 1).isdigit() else val
+
+                if op == "=":
+                    df = df[df[col] == val]
+                elif op == "<":
+                    df = df[df[col] < val]
+                elif op == ">":
+                    df = df[df[col] > val]
+                elif op == "<=":
+                    df = df[df[col] <= val]
+                elif op == ">=":
+                    df = df[df[col] >= val]
+                elif op == "!=":
+                    df = df[df[col] != val]
+            except ValueError:
+                return f"Invalid constraint value for {col}", 400
+
+    # Extract numbers for optimization
     nums = df[selected_column].dropna().tolist()
+
+    # Debug: Print information before optimization
+    print(f"Target sum: {target_sum}, Tolerance: {tolerance}")
+    print(f"Max combination size: {max_combination_size}")
+    print(f"Filtered dataset size: {len(nums)}")
 
     model = cp_model.CpModel()
     x = [model.NewBoolVar(f"x{i}") for i in range(len(nums))]
 
+    # Ensure Scaling Factor is Consistent
     scaling_factor = 100
     int_nums = [int(num * scaling_factor) for num in nums]
     int_target_sum = int(target_sum * scaling_factor)
@@ -71,12 +105,14 @@ def process():
 
     solver = cp_model.CpSolver()
     
-    # **Added a solver time limit (10 seconds) to prevent Render from killing the process**
+    # **Set a solver timeout to prevent Render from killing the process**
     solver.parameters.max_time_in_seconds = 10.0
 
     start_time = time.time()
     status = solver.Solve(model)
     end_time = time.time()
+
+    print(f"Solver status: {solver.StatusName(status)}, Time used: {solver.WallTime()}s")  # Debugging
 
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
         solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
