@@ -70,6 +70,10 @@ def process():
     model.Minimize(sum(x))
 
     solver = cp_model.CpSolver()
+    
+    # **Added a solver time limit (10 seconds) to prevent Render from killing the process**
+    solver.parameters.max_time_in_seconds = 10.0
+
     start_time = time.time()
     status = solver.Solve(model)
     end_time = time.time()
