@@ -8,7 +8,7 @@ import os
 app = Flask(__name__)
 
 # Ensure necessary folders exist
-UPLOAD_FOLDER = "/app/uploads"  # Changed to /app for Google Cloud compatibility
+UPLOAD_FOLDER = "/app/uploads"  # Use /app to make it Cloud Run compatible
 RESULTS_FOLDER = "/app/results"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -37,23 +37,16 @@ def index():
 def process():
     file_path = request.form["file_path"]
     selected_column = request.form["selected_column"]
-    max_combination_size = request.form["max_combination_size"]
-    target_sum = request.form["target_sum"]
-    tolerance = request.form["tolerance"]
-
-    try:
-        max_combination_size = int(max_combination_size)
-        target_sum = float(target_sum)
-        tolerance = float(tolerance)
-    except ValueError:
-        return "Invalid input for max combination size, target sum, or tolerance.", 400
+    max_combination_size = int(request.form["max_combination_size"])
+    target_sum = float(request.form["target_sum"])
+    tolerance = float(request.form["tolerance"])
+    max_solutions = int(request.form["max_solutions"])  # Get max solutions from user
 
     df = pd.read_excel(file_path)
 
     if selected_column not in df.columns:
         return "Invalid column selection", 400
 
-    # Extract numbers for optimization
     nums = df[selected_column].dropna().tolist()
 
     model = cp_model.CpModel()
@@ -68,51 +61,54 @@ def process():
 
     model.Add(total_sum >= int_target_sum - int_tolerance)
     model.Add(total_sum <= int_target_sum + int_tolerance)
-
     model.Add(sum(x) <= max_combination_size)
-    model.Minimize(sum(x))
 
     solver = cp_model.CpSolver()
-    start_time = time.time()
-    status = solver.Solve(model)
-    end_time = time.time()
+    solver.parameters.max_time_in_seconds = 60.0  # Allow more time for multiple solutions
 
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
-        achieved_sum = sum(solution)
-        exec_time = round(end_time - start_time, 4)
+    class SolutionPrinter(cp_model.CpSolverSolutionCallback):
+        def __init__(self, x_vars, numbers, max_solutions):
+            cp_model.CpSolverSolutionCallback.__init__(self)
+            self.x_vars = x_vars
+            self.numbers = numbers
+            self.solutions = []
+            self.max_solutions = max_solutions
 
-        # Select full rows from the original DataFrame based on selected numbers
-        selected_rows = df[df[selected_column].isin(solution)]
+        def OnSolutionCallback(self):
+            solution = [self.numbers[i] for i in range(len(self.x_vars)) if self.Value(self.x_vars[i]) == 1]
+            self.solutions.append(solution)
+            if len(self.solutions) >= self.max_solutions:
+                self.StopSearch()  # Stop once we hit max solutions
 
-        # Remove unnamed columns before saving
-        selected_rows = selected_rows.loc[:, ~selected_rows.columns.str.startswith("Unnamed")]
+    solution_printer = SolutionPrinter(x, nums, max_solutions)
 
-        # Save the cleaned-up results in /app (Google Cloud requires writable directories)
-        result_filename = os.path.join("/app", "solution.xlsx")  
-        print(f"✅ Saving cleaned results to: {result_filename}")  # Debugging Step
-        selected_rows.to_excel(result_filename, index=False)
+    solver.SearchForAllSolutions(model, solution_printer)
 
-        return render_template(
-            "result.html",
-            achieved_sum=achieved_sum,
-            exec_time=exec_time,
-            download_link=url_for("download_file", filename="solution.xlsx", _external=True),  
-        )
-    else:
-        return render_template(
-            "result.html",
-            error_message="No valid solution found.",
-        )
+    if not solution_printer.solutions:
+        return render_template("result.html", error_message="No valid solutions found.")
+
+    # Save each solution on its own Excel sheet
+    result_filename = os.path.join("/app", "solution.xlsx")
+    with pd.ExcelWriter(result_filename, engine="xlsxwriter") as writer:
+        for idx, solution in enumerate(solution_printer.solutions):
+            solution_df = df[df[selected_column].isin(solution)]
+            solution_df.to_excel(writer, sheet_name=f"Solution {idx+1}", index=False)
+
+    return render_template(
+        "result.html",
+        achieved_sum="Multiple solutions found!",
+        exec_time="N/A",
+        download_link=url_for("download_file", filename="solution.xlsx", _external=True),
+    )
 
 @app.route("/download/<filename>")
 def download_file(filename):
     """ Allow the user to download the generated Excel file. """
-    file_path = os.path.join("/app", filename)
+    file_path = os.path.join("/app", filename)  # Ensure correct path
 
     if not os.path.exists(file_path):
         print(f"❌ Error: File {file_path} not found!")  # Debugging Step
-        return "File not found", 404
+        return f"File not found: {file_path}", 404
 
     print(f"✅ Serving file: {file_path}")  # Debugging Step
     return send_file(file_path, as_attachment=True)
