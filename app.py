@@ -58,6 +58,10 @@ def process():
 
     nums = df[selected_column].dropna().tolist()
 
+    # Reduce problem size to prevent Render from killing process
+    if len(nums) > 500:
+        nums = nums[:500]  # Keep first 500 numbers
+
     # Debug: Print information before optimization
     print(f"Target sum: {target_sum}, Tolerance: {tolerance}")
     print(f"Max combination size: {max_combination_size}")
@@ -80,7 +84,7 @@ def process():
     model.Add(total_sum <= int_target_sum + int_tolerance)
 
     model.Add(sum(x) <= max_combination_size)
-    model.Minimize(sum(x))  # Keep optimization objective
+    model.Minimize(sum(x))
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = solver_timeout
@@ -93,11 +97,15 @@ def process():
 
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
             solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
+            
+            if solution in solutions:
+                continue  # Skip duplicate solutions
+            
             solutions.append(solution)
             print(f"Solution {len(solutions)}: {solution}")
 
-            # Add a constraint to **prevent the solver from finding the same solution again**
-            model.Add(sum(x[i] for i in range(len(nums)) if nums[i] in solution) <= max_combination_size - 1)
+            # Prevent duplicate solutions by adding constraint
+            model.Add(sum(x[j] for j in range(len(nums)) if solver.Value(x[j]) == 1) <= max_combination_size - 1)
         else:
             break  # Stop if no more solutions are found
 
