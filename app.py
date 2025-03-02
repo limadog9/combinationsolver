@@ -38,58 +38,37 @@ def process():
     max_combination_size = request.form["max_combination_size"]
     target_sum = request.form["target_sum"]
     tolerance = request.form["tolerance"]
+    max_solutions = request.form["max_solutions"]
+    solver_timeout = request.form["solver_timeout"]  # New timeout input
 
     # Convert user input to correct types
     try:
         max_combination_size = int(max_combination_size)
         target_sum = float(target_sum)
         tolerance = float(tolerance)
+        max_solutions = int(max_solutions)
+        solver_timeout = float(solver_timeout)  # Convert timeout to float
     except ValueError:
-        return "Invalid input for max combination size, target sum, or tolerance.", 400
+        return "Invalid input for one or more fields.", 400
 
     df = pd.read_excel(file_path)
 
     if selected_column not in df.columns:
         return "Invalid column selection", 400
 
-    # Read static constraints from the form
-    constraint_columns = request.form.getlist("constraint_column[]")
-    constraint_operators = request.form.getlist("constraint_operator[]")
-    constraint_values = request.form.getlist("constraint_value[]")
-
-    # Apply constraints dynamically
-    for col, op, val in zip(constraint_columns, constraint_operators, constraint_values):
-        if col and val:
-            try:
-                val = float(val) if val.replace('.', '', 1).isdigit() else val
-
-                if op == "=":
-                    df = df[df[col] == val]
-                elif op == "<":
-                    df = df[df[col] < val]
-                elif op == ">":
-                    df = df[df[col] > val]
-                elif op == "<=":
-                    df = df[df[col] <= val]
-                elif op == ">=":
-                    df = df[df[col] >= val]
-                elif op == "!=":
-                    df = df[df[col] != val]
-            except ValueError:
-                return f"Invalid constraint value for {col}", 400
-
-    # Extract numbers for optimization
     nums = df[selected_column].dropna().tolist()
 
     # Debug: Print information before optimization
     print(f"Target sum: {target_sum}, Tolerance: {tolerance}")
     print(f"Max combination size: {max_combination_size}")
+    print(f"Max solutions requested: {max_solutions}")
+    print(f"Solver timeout: {solver_timeout} seconds")
     print(f"Filtered dataset size: {len(nums)}")
 
     model = cp_model.CpModel()
     x = [model.NewBoolVar(f"x{i}") for i in range(len(nums))]
 
-    # Ensure Scaling Factor is Consistent
+    # Scaling factor to avoid float precision issues
     scaling_factor = 100
     int_nums = [int(num * scaling_factor) for num in nums]
     int_target_sum = int(target_sum * scaling_factor)
@@ -105,33 +84,53 @@ def process():
 
     solver = cp_model.CpSolver()
     
-    # **Set a solver timeout to prevent Render from killing the process**
-    solver.parameters.max_time_in_seconds = 10.0
+    # **Set solver timeout based on user input**
+    solver.parameters.max_time_in_seconds = solver_timeout
+
+    solution_printer = SolutionCollector(x, nums, max_solutions)  # Custom solution printer
 
     start_time = time.time()
-    status = solver.Solve(model)
+    status = solver.SearchForAllSolutions(model, solution_printer)
     end_time = time.time()
 
-    print(f"Solver status: {solver.StatusName(status)}, Time used: {solver.WallTime()}s")  # Debugging
+    print(f"Solver status: {solver.StatusName(status)}, Time used: {solver.WallTime()}s")
 
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
-        achieved_sum = sum(solution)
-        exec_time = round(end_time - start_time, 4)
+    if solution_printer.solutions_found == 0:
+        return render_template("result.html", error_message="No valid solutions found.")
 
-        selected_rows = df[df[selected_column].isin(solution)]
+    # Save multiple solutions to an Excel file (each on its own sheet)
+    result_filename = os.path.join(RESULTS_FOLDER, "solutions.xlsx")
+    with pd.ExcelWriter(result_filename, engine='openpyxl') as writer:
+        for i, solution in enumerate(solution_printer.solutions):
+            achieved_sum = sum(solution)
+            selected_rows = df[df[selected_column].isin(solution)]
+            selected_rows.to_excel(writer, sheet_name=f"Solution {i+1}", index=False)
 
-        result_filename = os.path.join(RESULTS_FOLDER, "solution.xlsx")
-        selected_rows.to_excel(result_filename, index=False)
+    return render_template(
+        "result.html",
+        achieved_sum="Multiple solutions found",
+        exec_time=round(end_time - start_time, 4),
+        download_link=url_for("download_file", filename="solutions.xlsx", _external=True),
+    )
 
-        return render_template(
-            "result.html",
-            achieved_sum=achieved_sum,
-            exec_time=exec_time,
-            download_link=url_for("download_file", filename="solution.xlsx", _external=True),
-        )
-    else:
-        return render_template("result.html", error_message="No valid solution found.")
+class SolutionCollector(cp_model.CpSolverSolutionCallback):
+    """ Custom solution collector for finding multiple solutions """
+
+    def __init__(self, x_vars, nums, max_solutions):
+        super().__init__()
+        self.x_vars = x_vars
+        self.nums = nums
+        self.max_solutions = max_solutions
+        self.solutions = []
+        self.solutions_found = 0
+
+    def OnSolutionCallback(self):
+        if self.solutions_found < self.max_solutions:
+            solution = [self.nums[i] for i in range(len(self.nums)) if self.Value(self.x_vars[i]) == 1]
+            self.solutions.append(solution)
+            self.solutions_found += 1
+        else:
+            self.StopSearch()
 
 @app.route("/download/<filename>")
 def download_file(filename):
