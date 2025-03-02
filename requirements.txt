@@ -1,5 +1,6 @@
 Flask
-pandas
 gunicorn
+pandas
 ortools
 openpyxl
+xlsxwriter  # <-- Added to fix the missing module error
