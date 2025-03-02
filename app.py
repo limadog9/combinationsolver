@@ -3,14 +3,16 @@ from ortools.sat.python import cp_model
 import pandas as pd
 import time
 import os
-import tempfile
 
 # Initialize Flask
 app = Flask(__name__)
 
-# Use temporary folders for uploads and results
-UPLOAD_FOLDER = tempfile.mkdtemp()
-RESULTS_FOLDER = tempfile.mkdtemp()
+# Ensure necessary folders exist
+UPLOAD_FOLDER = "/app/uploads"  # Changed to /app for Google Cloud compatibility
+RESULTS_FOLDER = "/app/results"
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -38,41 +40,25 @@ def process():
     max_combination_size = request.form["max_combination_size"]
     target_sum = request.form["target_sum"]
     tolerance = request.form["tolerance"]
-    max_solutions = request.form["max_solutions"]
-    solver_timeout = request.form["solver_timeout"]
 
-    # Convert user input to correct types
     try:
         max_combination_size = int(max_combination_size)
         target_sum = float(target_sum)
         tolerance = float(tolerance)
-        max_solutions = int(max_solutions)
-        solver_timeout = float(solver_timeout)
     except ValueError:
-        return "Invalid input for one or more fields.", 400
+        return "Invalid input for max combination size, target sum, or tolerance.", 400
 
     df = pd.read_excel(file_path)
 
     if selected_column not in df.columns:
         return "Invalid column selection", 400
 
+    # Extract numbers for optimization
     nums = df[selected_column].dropna().tolist()
-
-    # Reduce problem size dynamically to prevent crashes
-    if len(nums) > 300:  # Reduce size if dataset is large
-        nums = nums[:300]
-
-    # Debug: Print information before optimization
-    print(f"Target sum: {target_sum}, Tolerance: {tolerance}")
-    print(f"Max combination size: {max_combination_size}")
-    print(f"Max solutions requested: {max_solutions}")
-    print(f"Solver timeout: {solver_timeout} seconds")
-    print(f"Filtered dataset size: {len(nums)}")
 
     model = cp_model.CpModel()
     x = [model.NewBoolVar(f"x{i}") for i in range(len(nums))]
 
-    # Scaling factor to avoid float precision issues
     scaling_factor = 100
     int_nums = [int(num * scaling_factor) for num in nums]
     int_target_sum = int(target_sum * scaling_factor)
@@ -87,59 +73,49 @@ def process():
     model.Minimize(sum(x))
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = solver_timeout
-
-    solutions = []
     start_time = time.time()
-
-    for i in range(max_solutions):
-        status = solver.Solve(model)
-
-        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-            solution = [nums[j] for j in range(len(nums)) if solver.Value(x[j]) == 1]
-            
-            if solution in solutions:
-                continue  # Skip duplicate solutions
-            
-            solutions.append(solution)
-            print(f"Solution {len(solutions)}: {solution}")
-
-            # Prevent finding the same solution again
-            model.Add(sum(x[j] for j in range(len(nums)) if solver.Value(x[j]) == 1) <= max_combination_size - 1)
-
-            # **Break out of loop early if time is close to expiring**
-            if time.time() - start_time > solver_timeout * 0.9:
-                break
-        else:
-            break  # Stop if no more solutions are found
-
+    status = solver.Solve(model)
     end_time = time.time()
 
-    if len(solutions) == 0:
-        return render_template("result.html", error_message="No valid solutions found.")
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
+        achieved_sum = sum(solution)
+        exec_time = round(end_time - start_time, 4)
 
-    # Save multiple solutions to an Excel file (each on its own sheet)
-    result_filename = os.path.join(RESULTS_FOLDER, "solutions.xlsx")
-    with pd.ExcelWriter(result_filename, engine='openpyxl') as writer:
-        for i, solution in enumerate(solutions):
-            selected_rows = df[df[selected_column].isin(solution)]
-            selected_rows.to_excel(writer, sheet_name=f"Solution {i+1}", index=False)
+        # Select full rows from the original DataFrame based on selected numbers
+        selected_rows = df[df[selected_column].isin(solution)]
 
-    return render_template(
-        "result.html",
-        achieved_sum="Multiple solutions found",
-        exec_time=round(end_time - start_time, 4),
-        download_link=url_for("download_file", filename="solutions.xlsx", _external=True),
-    )
+        # Remove unnamed columns before saving
+        selected_rows = selected_rows.loc[:, ~selected_rows.columns.str.startswith("Unnamed")]
+
+        # Save the cleaned-up results in /app (Google Cloud requires writable directories)
+        result_filename = os.path.join("/app", "solution.xlsx")  
+        print(f"✅ Saving cleaned results to: {result_filename}")  # Debugging Step
+        selected_rows.to_excel(result_filename, index=False)
+
+        return render_template(
+            "result.html",
+            achieved_sum=achieved_sum,
+            exec_time=exec_time,
+            download_link=url_for("download_file", filename="solution.xlsx", _external=True),  
+        )
+    else:
+        return render_template(
+            "result.html",
+            error_message="No valid solution found.",
+        )
 
 @app.route("/download/<filename>")
 def download_file(filename):
-    file_path = os.path.join(RESULTS_FOLDER, filename)
+    """ Allow the user to download the generated Excel file. """
+    file_path = os.path.join("/app", filename)
 
     if not os.path.exists(file_path):
+        print(f"❌ Error: File {file_path} not found!")  # Debugging Step
         return "File not found", 404
 
+    print(f"✅ Serving file: {file_path}")  # Debugging Step
     return send_file(file_path, as_attachment=True)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
