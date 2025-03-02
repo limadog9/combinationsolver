@@ -1,148 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Select Constraints</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Column</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 20px;
+            margin: 40px;
+            text-align: center;
         }
-
-        h2, h3 {
-            color: #333;
-        }
-
         form {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: 600px;
-            margin: auto;
-        }
-
-        label {
-            font-weight: bold;
-            display: block;
-            margin-top: 10px;
-        }
-
-        select, input {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-
-        th, td {
-            padding: 10px;
+            display: inline-block;
             text-align: left;
+            margin-top: 20px;
         }
-
-        th {
-            background-color: #007bff;
-            color: white;
+        label, input, select {
+            display: block;
+            margin-bottom: 10px;
         }
-
-        .constraint-row select, .constraint-row input {
-            width: 90%;
-        }
-
         button {
             background-color: #007bff;
             color: white;
             border: none;
-            padding: 10px 15px;
-            font-size: 16px;
+            padding: 10px 20px;
             cursor: pointer;
-            margin-top: 15px;
-            width: 100%;
-            border-radius: 5px;
         }
-
         button:hover {
             background-color: #0056b3;
         }
-
-        .constraint-row {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
     </style>
-    <script>
-        function addConstraintRow() {
-            let constraintsDiv = document.getElementById("constraints");
-            let rows = constraintsDiv.getElementsByClassName("constraint-row");
-
-            // Don't add a new row unless the last row has a column selected
-            let lastRow = rows[rows.length - 1];
-            let lastSelect = lastRow.querySelector("select[name='constraint_column[]']");
-            
-            if (lastSelect.value === "") return;
-
-            let newRow = lastRow.cloneNode(true);
-
-            // Reset the cloned row values
-            newRow.querySelector("select[name='constraint_column[]']").value = "";
-            newRow.querySelector("select[name='constraint_operator[]']").value = "=";
-            newRow.querySelector("input[name='constraint_value[]']").value = "";
-
-            constraintsDiv.appendChild(newRow);
-        }
-    </script>
 </head>
 <body>
-    <h2>Select Numeric Column:</h2>
+    <h2>Select Column for Optimization</h2>
     <form action="/process" method="post">
         <input type="hidden" name="file_path" value="{{ file_path }}">
-
-        <label for="selected_column">Select Numeric Column:</label>
-        <select name="selected_column" id="selected_column">
+        
+        <label for="selected_column">Choose a Column:</label>
+        <select name="selected_column" required>
             {% for column in columns %}
                 <option value="{{ column }}">{{ column }}</option>
             {% endfor %}
         </select>
 
         <label for="max_combination_size">Max Combination Size:</label>
-        <input type="text" name="max_combination_size" required>
+        <input type="number" name="max_combination_size" min="1" required>
 
         <label for="target_sum">Target Sum:</label>
-        <input type="text" name="target_sum" required>
+        <input type="number" name="target_sum" step="any" required>
 
         <label for="tolerance">Tolerance:</label>
-        <input type="text" name="tolerance" required>
+        <input type="number" name="tolerance" step="any" required>
 
-        <h3>Constraints:</h3>
-        <div id="constraints">
-            <div class="constraint-row">
-                <select name="constraint_column[]" onchange="addConstraintRow()">
-                    <option value="">None</option>
-                    {% for col in columns %}
-                        <option value="{{ col }}">{{ col }}</option>
-                    {% endfor %}
-                </select>
-                <select name="constraint_operator[]">
-                    <option value="=">=</option>
-                    <option value="<"><</option>
-                    <option value=">">></option>
-                    <option value="<="><=</option>
-                    <option value=">=">>=</option>
-                    <option value="!=">!=</option>
-                </select>
-                <input type="text" name="constraint_value[]" placeholder="Enter value">
-            </div>
-        </div>
+        <label for="max_solutions">Max Number of Solutions:</label>
+        <input type="number" name="max_solutions" min="1" required>
+
+        <label for="solver_timeout">Solver Timeout (seconds):</label>
+        <input type="number" name="solver_timeout" min="1" max="60" value="10" required>
 
         <button type="submit">Run Optimization</button>
     </form>

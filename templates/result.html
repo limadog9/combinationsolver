@@ -1,74 +1,46 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Results</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 20px;
-        }
-
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: 400px;
-            margin: auto;
+            margin: 40px;
             text-align: center;
         }
-
-        h2 {
-            color: #333;
-        }
-
-        p {
-            font-size: 16px;
-            color: #555;
-            margin: 10px 0;
-        }
-
-        .button-container {
+        .message {
             margin-top: 20px;
         }
-
-        a {
-            text-decoration: none;
+        .download {
+            margin-top: 20px;
         }
-
-        button {
-            background-color: #007bff;
+        a {
+            background-color: #28a745;
             color: white;
-            border: none;
-            padding: 12px 15px;
-            font-size: 16px;
-            cursor: pointer;
-            width: 100%;
+            text-decoration: none;
+            padding: 10px 20px;
+            display: inline-block;
             border-radius: 5px;
         }
-
-        button:hover {
-            background-color: #0056b3;
+        a:hover {
+            background-color: #218838;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Results</h2>
-        {% if error_message %}
-            <p style="color: red;">{{ error_message }}</p>
-        {% else %}
-            <p><strong>Achieved Sum:</strong> {{ achieved_sum }}</p>
-            <p><strong>Execution Time:</strong> {{ exec_time }} seconds</p>
-            <div class="button-container">
-                <a href="{{ download_link }}">
-                    <button>Download Results</button>
-                </a>
-            </div>
-        {% endif %}
-    </div>
+    <h2>Optimization Results</h2>
+
+    {% if error_message %}
+        <p class="message" style="color: red;">{{ error_message }}</p>
+    {% else %}
+        <p class="message">Optimization completed successfully!</p>
+        <p>Execution Time: {{ exec_time }} seconds</p>
+        <div class="download">
+            <a href="{{ download_link }}">Download Results</a>
+        </div>
+    {% endif %}
 </body>
 </html>
 
