@@ -58,9 +58,9 @@ def process():
 
     nums = df[selected_column].dropna().tolist()
 
-    # Reduce problem size to prevent Render from killing process
-    if len(nums) > 500:
-        nums = nums[:500]  # Keep first 500 numbers
+    # Reduce problem size dynamically to prevent crashes
+    if len(nums) > 300:  # Reduce size if dataset is large
+        nums = nums[:300]
 
     # Debug: Print information before optimization
     print(f"Target sum: {target_sum}, Tolerance: {tolerance}")
@@ -96,7 +96,7 @@ def process():
         status = solver.Solve(model)
 
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-            solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
+            solution = [nums[j] for j in range(len(nums)) if solver.Value(x[j]) == 1]
             
             if solution in solutions:
                 continue  # Skip duplicate solutions
@@ -104,8 +104,12 @@ def process():
             solutions.append(solution)
             print(f"Solution {len(solutions)}: {solution}")
 
-            # Prevent duplicate solutions by adding constraint
+            # Prevent finding the same solution again
             model.Add(sum(x[j] for j in range(len(nums)) if solver.Value(x[j]) == 1) <= max_combination_size - 1)
+
+            # **Break out of loop early if time is close to expiring**
+            if time.time() - start_time > solver_timeout * 0.9:
+                break
         else:
             break  # Stop if no more solutions are found
 
