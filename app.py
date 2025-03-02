@@ -39,7 +39,7 @@ def process():
     target_sum = request.form["target_sum"]
     tolerance = request.form["tolerance"]
     max_solutions = request.form["max_solutions"]
-    solver_timeout = request.form["solver_timeout"]  # New timeout input
+    solver_timeout = request.form["solver_timeout"]
 
     # Convert user input to correct types
     try:
@@ -47,7 +47,7 @@ def process():
         target_sum = float(target_sum)
         tolerance = float(tolerance)
         max_solutions = int(max_solutions)
-        solver_timeout = float(solver_timeout)  # Convert timeout to float
+        solver_timeout = float(solver_timeout)
     except ValueError:
         return "Invalid input for one or more fields.", 400
 
@@ -80,29 +80,36 @@ def process():
     model.Add(total_sum <= int_target_sum + int_tolerance)
 
     model.Add(sum(x) <= max_combination_size)
-    model.Minimize(sum(x))
+    model.Minimize(sum(x))  # Keep optimization objective
 
     solver = cp_model.CpSolver()
-    
-    # **Set solver timeout based on user input**
     solver.parameters.max_time_in_seconds = solver_timeout
 
-    solution_printer = SolutionCollector(x, nums, max_solutions)  # Custom solution printer
-
+    solutions = []
     start_time = time.time()
-    status = solver.SearchForAllSolutions(model, solution_printer)
+
+    for i in range(max_solutions):
+        status = solver.Solve(model)
+
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
+            solutions.append(solution)
+            print(f"Solution {len(solutions)}: {solution}")
+
+            # Add a constraint to **prevent the solver from finding the same solution again**
+            model.Add(sum(x[i] for i in range(len(nums)) if nums[i] in solution) <= max_combination_size - 1)
+        else:
+            break  # Stop if no more solutions are found
+
     end_time = time.time()
 
-    print(f"Solver status: {solver.StatusName(status)}, Time used: {solver.WallTime()}s")
-
-    if solution_printer.solutions_found == 0:
+    if len(solutions) == 0:
         return render_template("result.html", error_message="No valid solutions found.")
 
     # Save multiple solutions to an Excel file (each on its own sheet)
     result_filename = os.path.join(RESULTS_FOLDER, "solutions.xlsx")
     with pd.ExcelWriter(result_filename, engine='openpyxl') as writer:
-        for i, solution in enumerate(solution_printer.solutions):
-            achieved_sum = sum(solution)
+        for i, solution in enumerate(solutions):
             selected_rows = df[df[selected_column].isin(solution)]
             selected_rows.to_excel(writer, sheet_name=f"Solution {i+1}", index=False)
 
@@ -112,25 +119,6 @@ def process():
         exec_time=round(end_time - start_time, 4),
         download_link=url_for("download_file", filename="solutions.xlsx", _external=True),
     )
-
-class SolutionCollector(cp_model.CpSolverSolutionCallback):
-    """ Custom solution collector for finding multiple solutions """
-
-    def __init__(self, x_vars, nums, max_solutions):
-        super().__init__()
-        self.x_vars = x_vars
-        self.nums = nums
-        self.max_solutions = max_solutions
-        self.solutions = []
-        self.solutions_found = 0
-
-    def OnSolutionCallback(self):
-        if self.solutions_found < self.max_solutions:
-            solution = [self.nums[i] for i in range(len(self.nums)) if self.Value(self.x_vars[i]) == 1]
-            self.solutions.append(solution)
-            self.solutions_found += 1
-        else:
-            self.StopSearch()
 
 @app.route("/download/<filename>")
 def download_file(filename):
