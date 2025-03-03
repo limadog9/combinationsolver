@@ -12,8 +12,8 @@
         }
         .btn {
             display: inline-block;
-            padding: 10px 20px;
-            font-size: 16px;
+            padding: 12px 24px;
+            font-size: 18px;
             color: white;
             background-color: green;
             border: none;
@@ -21,6 +21,7 @@
             text-decoration: none;
             margin-top: 20px;
             border-radius: 5px;
+            font-weight: bold;
         }
         .btn:hover {
             background-color: darkgreen;
@@ -36,8 +37,8 @@
         <p>Optimization completed successfully!</p>
         <p>Execution Time: {{ exec_time }} seconds</p>
         
-        <!-- Direct, simple download button -->
-        <a href="{{ download_link }}" class="btn" download>Download Results</a>
+        <!-- Direct Download Button -->
+        <a id="download-btn" href="{{ download_link }}" class="btn" download>Download Results</a>
     {% endif %}
 </body>
 </html>
