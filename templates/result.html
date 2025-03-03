@@ -8,57 +8,37 @@
         body {
             font-family: Arial, sans-serif;
             text-align: center;
-            margin-top: 50px;
+            margin: 50px;
         }
         .btn {
             display: inline-block;
-            padding: 12px 24px;
-            font-size: 18px;
-            color: white;
-            background-color: green;
-            border: none;
-            cursor: pointer;
-            text-decoration: none;
-            margin-top: 20px;
-            border-radius: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
             font-weight: bold;
+            color: white;
+            background-color: #0b800b;
+            border: none;
+            text-decoration: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 20px;
         }
         .btn:hover {
-            background-color: darkgreen;
+            background-color: #065f06;
         }
     </style>
 </head>
 <body>
+
     <h1>Optimization Results</h1>
-    
-    {% if error_message %}
-        <p style="color: red;">{{ error_message }}</p>
-    {% else %}
-        <p>Optimization completed successfully!</p>
-        <p>Execution Time: {{ exec_time }} seconds</p>
-        
-        <!-- Forcefully set the correct download link -->
+    <p>Optimization completed successfully!</p>
+    <p>Execution Time: {{ exec_time if exec_time else 'Check logs for time' }} seconds</p>
+
+    {% if download_link %}
         <a id="download-btn" href="{{ download_link }}" class="btn" download="solution.xlsx">Download Results</a>
-
-        <script>
-            document.addEventListener("DOMContentLoaded", function () {
-                let downloadBtn = document.getElementById("download-btn");
-                let downloadUrl = "{{ download_link }}";
-                
-                // Debugging Output
-                console.log("Download Link:", downloadUrl);
-
-                if (!downloadUrl || downloadUrl === "") {
-                    console.error("❌ Download link is empty!");
-                    alert("Error: No file available for download.");
-                } else {
-                    downloadBtn.addEventListener("click", function(event) {
-                        event.preventDefault();
-                        window.location.href = downloadUrl;
-                    });
-                }
-            });
-        </script>
+    {% else %}
+        <p style="color: red;">No results file generated.</p>
     {% endif %}
+
 </body>
 </html>
