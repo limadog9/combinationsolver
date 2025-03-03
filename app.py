@@ -4,11 +4,9 @@ import pandas as pd
 import time
 import os
 
-# Initialize Flask
 app = Flask(__name__)
 
-# Ensure necessary folders exist
-UPLOAD_FOLDER = "/app/uploads"  # Use /app to make it Cloud Run compatible
+UPLOAD_FOLDER = "/app/uploads"
 RESULTS_FOLDER = "/app/results"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -26,7 +24,6 @@ def index():
 
         df = pd.read_excel(file_path)
 
-        # Filter out unnamed columns
         valid_columns = [col for col in df.columns if not col.startswith("Unnamed")]
 
         return render_template("select_column.html", columns=valid_columns, file_path=file_path)
@@ -40,7 +37,7 @@ def process():
     max_combination_size = int(request.form["max_combination_size"])
     target_sum = float(request.form["target_sum"])
     tolerance = float(request.form["tolerance"])
-    max_solutions = int(request.form["max_solutions"])  # Get max solutions from user
+    max_solutions = int(request.form["max_solutions"])
 
     df = pd.read_excel(file_path)
 
@@ -64,9 +61,9 @@ def process():
     model.Add(sum(x) <= max_combination_size)
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 60.0  # Allow more time for multiple solutions
+    solver.parameters.max_time_in_seconds = 60.0
 
-    print("🚀 Solver started...")  # Debugging Step
+    print("🚀 Solver started...")
 
     class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         def __init__(self, x_vars, numbers, max_solutions):
@@ -79,28 +76,30 @@ def process():
         def OnSolutionCallback(self):
             solution = [self.numbers[i] for i in range(len(self.x_vars)) if self.Value(self.x_vars[i]) == 1]
             self.solutions.append(solution)
-            print(f"✅ Found solution {len(self.solutions)}: {solution}")  # Debugging Step
+            print(f"✅ Found solution {len(self.solutions)}: {solution}")
             if len(self.solutions) >= self.max_solutions:
-                self.StopSearch()  # Stop once we hit max solutions
+                self.StopSearch()
 
     solution_printer = SolutionPrinter(x, nums, max_solutions)
 
     solver.SearchForAllSolutions(model, solution_printer)
 
     if not solution_printer.solutions:
-        print("❌ No valid solutions found!")  # Debugging Step
+        print("❌ No valid solutions found!")
         return render_template("result.html", error_message="No valid solutions found.")
 
-    print(f"✅ Total solutions found: {len(solution_printer.solutions)}")  # Debugging Step
+    print(f"✅ Total solutions found: {len(solution_printer.solutions)}")
 
-    # Save each solution on its own Excel sheet
-    result_filename = os.path.join("/app", "solution.xlsx")
+    # Ensure the results folder exists
+    os.makedirs(RESULTS_FOLDER, exist_ok=True)
+
+    result_filename = os.path.join(RESULTS_FOLDER, "solution.xlsx")
     with pd.ExcelWriter(result_filename, engine="xlsxwriter") as writer:
         for idx, solution in enumerate(solution_printer.solutions):
             solution_df = df[df[selected_column].isin(solution)]
             solution_df.to_excel(writer, sheet_name=f"Solution {idx+1}", index=False)
 
-    print(f"✅ File saved at: {result_filename}")  # Debugging Step
+    print(f"✅ File saved at: {result_filename}")
 
     return render_template(
         "result.html",
@@ -111,15 +110,20 @@ def process():
 
 @app.route("/download/<filename>")
 def download_file(filename):
-    """ Allow the user to download the generated Excel file. """
-    file_path = os.path.join("/app", filename)  # Ensure correct path
+    file_path = os.path.join(RESULTS_FOLDER, filename)
 
     if not os.path.exists(file_path):
-        print(f"❌ Error: File {file_path} not found!")  # Debugging Step
+        print(f"❌ Error: File {file_path} not found!")
         return f"File not found: {file_path}", 404
 
-    print(f"✅ Serving file: {file_path}")  # Debugging Step
-    return send_file(file_path, as_attachment=True)
+    print(f"✅ Serving file: {file_path}")
+
+    return send_file(
+        file_path,
+        as_attachment=True,  # Forces download instead of opening
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # Ensures Excel recognition
+        download_name=filename  # Forces correct filename
+    )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
