@@ -3,4 +3,4 @@ pandas==1.5.3
 gunicorn==20.1.0
 xlsxwriter==3.0.3
 ortools==9.6.2534
-werkzeug==2.1.2
+werkzeug==2.0.3
