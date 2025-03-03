@@ -4,7 +4,7 @@ import pandas as pd
 import time
 import os
 
-# ✅ Flask app must be defined BEFORE routes
+# ✅ Initialize Flask
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "/app/uploads"
