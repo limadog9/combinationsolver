@@ -1,10 +1,13 @@
-from flask import Flask, request, render_template, send_file
+from flask import Flask, request, render_template, send_file, url_for
 import pandas as pd
 import os
 import time
 from ortools.sat.python import cp_model
 
 app = Flask(__name__)
+
+RESULTS_FOLDER = "results"
+os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
 @app.route('/')
 def index():
@@ -14,7 +17,6 @@ def index():
 def process():
     start_time = time.time()
 
-    # Retrieve user inputs
     file = request.files['file']
     target_sum = float(request.form['target_sum'])
     tolerance = float(request.form['tolerance'])
@@ -22,36 +24,26 @@ def process():
     max_solutions = int(request.form['max_solutions'])
     solver_timeout = float(request.form['solver_timeout'])
 
-    # Read input file
     df = pd.read_excel(file)
     numbers = df.iloc[:, 0].tolist()
 
-    # Initialize OR-Tools Model
     model = cp_model.CpModel()
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = solver_timeout
 
-    # Variables
-    selection_vars = []
-    for i in range(len(numbers)):
-        var = model.NewBoolVar(f'x_{i}')
-        selection_vars.append(var)
+    selection_vars = [model.NewBoolVar(f'x_{i}') for i in range(len(numbers))]
 
-    # Constraint: Selected numbers must sum to target ± tolerance
     model.Add(sum(numbers[i] * selection_vars[i] for i in range(len(numbers))) >= target_sum - tolerance)
     model.Add(sum(numbers[i] * selection_vars[i] for i in range(len(numbers))) <= target_sum + tolerance)
-
-    # Constraint: Limit number of selected numbers
     model.Add(sum(selection_vars) <= max_combination_size)
 
-    # Solution Collector
     class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         def __init__(self, selection_vars, numbers):
             cp_model.CpSolverSolutionCallback.__init__(self)
             self.selection_vars = selection_vars
             self.numbers = numbers
             self.solutions = []
-        
+
         def on_solution_callback(self):
             solution = [self.numbers[i] for i in range(len(self.numbers)) if self.Value(self.selection_vars[i])]
             self.solutions.append(solution)
@@ -59,20 +51,19 @@ def process():
                 self.StopSearch()
 
     solution_printer = SolutionPrinter(selection_vars, numbers)
-    status = solver.SearchForAllSolutions(model, solution_printer)
+    solver.SearchForAllSolutions(model, solution_printer)
 
-    # Save solutions to Excel
-    result_filename = "solution.xlsx"
+    result_filename = os.path.join(RESULTS_FOLDER, "solution.xlsx")
     with pd.ExcelWriter(result_filename, engine="xlsxwriter") as writer:
         for idx, solution in enumerate(solution_printer.solutions):
             pd.DataFrame(solution, columns=["Solution Values"]).to_excel(writer, sheet_name=f'Solution {idx + 1}', index=False)
 
     execution_time = round(time.time() - start_time, 4)
-    return render_template('result.html', execution_time=execution_time)
+    return render_template('result.html', execution_time=execution_time, download_link=url_for('download_file', filename="solution.xlsx", _external=True))
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    return send_file(filename, as_attachment=True)
+    return send_file(os.path.join(RESULTS_FOLDER, filename), as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=10000)
