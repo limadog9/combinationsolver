@@ -78,7 +78,7 @@ def process():
             "result.html",
             achieved_sum=achieved_sum,
             exec_time=exec_time,
-            download_link=url_for("download_file", filename="solution.xlsx", _external=True),
+            download_link=url_for("download_file", filename="solution.xlsx", _external=True, _scheme="https"),
         )
     else:
         return render_template(
