@@ -35,7 +35,16 @@
     {% else %}
         <p>Optimization completed successfully!</p>
         <p>Execution Time: {{ exec_time }} seconds</p>
-        <a href="{{ download_link }}" class="btn" download>Download Results</a>
+        
+        <!-- This forces the download on button click -->
+        <a href="{{ download_link }}" class="btn" id="download-btn">Download Results</a>
+
+        <script>
+            document.getElementById("download-btn").addEventListener("click", function(event) {
+                event.preventDefault();
+                window.location.href = "{{ download_link }}";
+            });
+        </script>
     {% endif %}
 </body>
 </html>
