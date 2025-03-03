@@ -1,99 +1,78 @@
-from flask import Flask, request, render_template, send_file, url_for
-from ortools.sat.python import cp_model
+from flask import Flask, request, render_template, send_file
 import pandas as pd
 import os
 import time
+from ortools.sat.python import cp_model
 
-# Initialize Flask
 app = Flask(__name__)
 
-# Ensure necessary folders exist
-RESULTS_FOLDER = "results"
-os.makedirs(RESULTS_FOLDER, exist_ok=True)
-
-@app.route("/", methods=["GET", "POST"])
+@app.route('/')
 def index():
-    if request.method == "POST":
-        if "file" not in request.files:
-            return "No file uploaded", 400
-        file = request.files["file"]
-        
-        file_path = os.path.join(RESULTS_FOLDER, file.filename)
-        file.save(file_path)
+    return render_template('index.html')
 
-        df = pd.read_excel(file_path)
-        valid_columns = [col for col in df.columns if not col.startswith("Unnamed")]
-
-        return render_template("select_column.html", columns=valid_columns, file_path=file_path)
-
-    return render_template("index.html")
-
-@app.route("/process", methods=["POST"])
+@app.route('/process', methods=['POST'])
 def process():
-    try:
-        file_path = request.form["file_path"]
-        selected_column = request.form["selected_column"]
-        max_combination_size = int(request.form["max_combination_size"])
-        target_sum = float(request.form["target_sum"])
-        tolerance = float(request.form["tolerance"])
+    start_time = time.time()
 
-        df = pd.read_excel(file_path)
-        if selected_column not in df.columns:
-            return "Invalid column selection", 400
+    # Retrieve user inputs
+    file = request.files['file']
+    target_sum = float(request.form['target_sum'])
+    tolerance = float(request.form['tolerance'])
+    max_combination_size = int(request.form['max_combination_size'])
+    max_solutions = int(request.form['max_solutions'])
+    solver_timeout = float(request.form['solver_timeout'])
 
-        nums = df[selected_column].dropna().tolist()
+    # Read input file
+    df = pd.read_excel(file)
+    numbers = df.iloc[:, 0].tolist()
 
-        model = cp_model.CpModel()
-        x = [model.NewBoolVar(f"x{i}") for i in range(len(nums))]
+    # Initialize OR-Tools Model
+    model = cp_model.CpModel()
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = solver_timeout
 
-        scaling_factor = 100
-        int_nums = [int(num * scaling_factor) for num in nums]
-        int_target_sum = int(target_sum * scaling_factor)
-        int_tolerance = int(tolerance * scaling_factor)
+    # Variables
+    selection_vars = []
+    for i in range(len(numbers)):
+        var = model.NewBoolVar(f'x_{i}')
+        selection_vars.append(var)
 
-        total_sum = sum(x[i] * int_nums[i] for i in range(len(int_nums)))
+    # Constraint: Selected numbers must sum to target ± tolerance
+    model.Add(sum(numbers[i] * selection_vars[i] for i in range(len(numbers))) >= target_sum - tolerance)
+    model.Add(sum(numbers[i] * selection_vars[i] for i in range(len(numbers))) <= target_sum + tolerance)
 
-        model.Add(total_sum >= int_target_sum - int_tolerance)
-        model.Add(total_sum <= int_target_sum + int_tolerance)
-        model.Add(sum(x) <= max_combination_size)
-        model.Minimize(sum(x))
+    # Constraint: Limit number of selected numbers
+    model.Add(sum(selection_vars) <= max_combination_size)
 
-        solver = cp_model.CpSolver()
-        start_time = time.time()
-        status = solver.Solve(model)
-        end_time = time.time()
+    # Solution Collector
+    class SolutionPrinter(cp_model.CpSolverSolutionCallback):
+        def __init__(self, selection_vars, numbers):
+            cp_model.CpSolverSolutionCallback.__init__(self)
+            self.selection_vars = selection_vars
+            self.numbers = numbers
+            self.solutions = []
+        
+        def on_solution_callback(self):
+            solution = [self.numbers[i] for i in range(len(self.numbers)) if self.Value(self.selection_vars[i])]
+            self.solutions.append(solution)
+            if len(self.solutions) >= max_solutions:
+                self.StopSearch()
 
-        if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
-            achieved_sum = sum(solution)
-            exec_time = round(end_time - start_time, 4)
+    solution_printer = SolutionPrinter(selection_vars, numbers)
+    status = solver.SearchForAllSolutions(model, solution_printer)
 
-            selected_rows = df[df[selected_column].isin(solution)]
-            selected_rows = selected_rows.loc[:, ~selected_rows.columns.str.startswith("Unnamed")]
+    # Save solutions to Excel
+    result_filename = "solution.xlsx"
+    with pd.ExcelWriter(result_filename, engine="xlsxwriter") as writer:
+        for idx, solution in enumerate(solution_printer.solutions):
+            pd.DataFrame(solution, columns=["Solution Values"]).to_excel(writer, sheet_name=f'Solution {idx + 1}', index=False)
 
-            result_filename = os.path.join(RESULTS_FOLDER, "solution.xlsx")
-            selected_rows.to_excel(result_filename, index=False)
+    execution_time = round(time.time() - start_time, 4)
+    return render_template('result.html', execution_time=execution_time)
 
-            return render_template(
-                "result.html",
-                achieved_sum=achieved_sum,
-                exec_time=exec_time,
-                download_link=url_for("download_file", filename="solution.xlsx", _external=True, _scheme="https"),
-            )
-        else:
-            return render_template("result.html", error_message="No valid solution found.")
-
-    except Exception as e:
-        return f"Error: {str(e)}", 500
-
-@app.route("/download/<filename>")
+@app.route('/download/<filename>')
 def download_file(filename):
-    """ Fix HTTPS Download Issue """
-    file_path = os.path.join(RESULTS_FOLDER, filename)
-    if not os.path.exists(file_path):
-        return "File not found", 404
+    return send_file(filename, as_attachment=True)
 
-    return send_file(file_path, as_attachment=True)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
