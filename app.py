@@ -7,7 +7,7 @@ import time
 # Initialize Flask
 app = Flask(__name__)
 
-# Ensure results folder exists
+# Ensure necessary folders exist
 RESULTS_FOLDER = "results"
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
@@ -30,71 +30,70 @@ def index():
 
 @app.route("/process", methods=["POST"])
 def process():
-    file_path = request.form["file_path"]
-    selected_column = request.form["selected_column"]
-    max_combination_size = int(request.form["max_combination_size"])
-    target_sum = float(request.form["target_sum"])
-    tolerance = float(request.form["tolerance"])
+    try:
+        file_path = request.form["file_path"]
+        selected_column = request.form["selected_column"]
+        max_combination_size = int(request.form["max_combination_size"])
+        target_sum = float(request.form["target_sum"])
+        tolerance = float(request.form["tolerance"])
 
-    df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path)
+        if selected_column not in df.columns:
+            return "Invalid column selection", 400
 
-    if selected_column not in df.columns:
-        return "Invalid column selection", 400
+        nums = df[selected_column].dropna().tolist()
 
-    nums = df[selected_column].dropna().tolist()
+        model = cp_model.CpModel()
+        x = [model.NewBoolVar(f"x{i}") for i in range(len(nums))]
 
-    model = cp_model.CpModel()
-    x = [model.NewBoolVar(f"x{i}") for i in range(len(nums))]
+        scaling_factor = 100
+        int_nums = [int(num * scaling_factor) for num in nums]
+        int_target_sum = int(target_sum * scaling_factor)
+        int_tolerance = int(tolerance * scaling_factor)
 
-    scaling_factor = 100
-    int_nums = [int(num * scaling_factor) for num in nums]
-    int_target_sum = int(target_sum * scaling_factor)
-    int_tolerance = int(tolerance * scaling_factor)
+        total_sum = sum(x[i] * int_nums[i] for i in range(len(int_nums)))
 
-    total_sum = sum(x[i] * int_nums[i] for i in range(len(int_nums)))
+        model.Add(total_sum >= int_target_sum - int_tolerance)
+        model.Add(total_sum <= int_target_sum + int_tolerance)
+        model.Add(sum(x) <= max_combination_size)
+        model.Minimize(sum(x))
 
-    model.Add(total_sum >= int_target_sum - int_tolerance)
-    model.Add(total_sum <= int_target_sum + int_tolerance)
-    model.Add(sum(x) <= max_combination_size)
-    model.Minimize(sum(x))
+        solver = cp_model.CpSolver()
+        start_time = time.time()
+        status = solver.Solve(model)
+        end_time = time.time()
 
-    solver = cp_model.CpSolver()
-    start_time = time.time()
-    status = solver.Solve(model)
-    end_time = time.time()
+        if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
+            achieved_sum = sum(solution)
+            exec_time = round(end_time - start_time, 4)
 
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
-        achieved_sum = sum(solution)
-        exec_time = round(end_time - start_time, 4)
+            selected_rows = df[df[selected_column].isin(solution)]
+            selected_rows = selected_rows.loc[:, ~selected_rows.columns.str.startswith("Unnamed")]
 
-        selected_rows = df[df[selected_column].isin(solution)]
-        selected_rows = selected_rows.loc[:, ~selected_rows.columns.str.startswith("Unnamed")]
+            result_filename = os.path.join(RESULTS_FOLDER, "solution.xlsx")
+            selected_rows.to_excel(result_filename, index=False)
 
-        result_filename = os.path.join(RESULTS_FOLDER, "solution.xlsx")
-        selected_rows.to_excel(result_filename, index=False)
+            return render_template(
+                "result.html",
+                achieved_sum=achieved_sum,
+                exec_time=exec_time,
+                download_link=url_for("download_file", filename="solution.xlsx", _external=True, _scheme="https"),
+            )
+        else:
+            return render_template("result.html", error_message="No valid solution found.")
 
-        return render_template(
-            "result.html",
-            achieved_sum=achieved_sum,
-            exec_time=exec_time,
-            download_link=url_for("download_file", filename="solution.xlsx", _external=True, _scheme="https"),
-        )
-    else:
-        return render_template(
-            "result.html",
-            error_message="No valid solution found.",
-        )
+    except Exception as e:
+        return f"Error: {str(e)}", 500
 
 @app.route("/download/<filename>")
 def download_file(filename):
-    """ Allow the user to download the generated Excel file. """
+    """ Fix HTTPS Download Issue """
     file_path = os.path.join(RESULTS_FOLDER, filename)
-
     if not os.path.exists(file_path):
         return "File not found", 404
 
     return send_file(file_path, as_attachment=True)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=True)
