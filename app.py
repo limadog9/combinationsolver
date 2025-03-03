@@ -66,6 +66,8 @@ def process():
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 60.0  # Allow more time for multiple solutions
 
+    print("🚀 Solver started...")  # Debugging Step
+
     class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         def __init__(self, x_vars, numbers, max_solutions):
             cp_model.CpSolverSolutionCallback.__init__(self)
@@ -77,6 +79,7 @@ def process():
         def OnSolutionCallback(self):
             solution = [self.numbers[i] for i in range(len(self.x_vars)) if self.Value(self.x_vars[i]) == 1]
             self.solutions.append(solution)
+            print(f"✅ Found solution {len(self.solutions)}: {solution}")  # Debugging Step
             if len(self.solutions) >= self.max_solutions:
                 self.StopSearch()  # Stop once we hit max solutions
 
@@ -85,7 +88,10 @@ def process():
     solver.SearchForAllSolutions(model, solution_printer)
 
     if not solution_printer.solutions:
+        print("❌ No valid solutions found!")  # Debugging Step
         return render_template("result.html", error_message="No valid solutions found.")
+
+    print(f"✅ Total solutions found: {len(solution_printer.solutions)}")  # Debugging Step
 
     # Save each solution on its own Excel sheet
     result_filename = os.path.join("/app", "solution.xlsx")
@@ -94,10 +100,12 @@ def process():
             solution_df = df[df[selected_column].isin(solution)]
             solution_df.to_excel(writer, sheet_name=f"Solution {idx+1}", index=False)
 
+    print(f"✅ File saved at: {result_filename}")  # Debugging Step
+
     return render_template(
         "result.html",
-        achieved_sum="Multiple solutions found!",
-        exec_time="N/A",
+        achieved_sum=f"{len(solution_printer.solutions)} solutions found!",
+        exec_time="Check logs for time",
         download_link=url_for("download_file", filename="solution.xlsx", _external=True),
     )
 

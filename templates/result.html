@@ -3,44 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Results</title>
+    <title>Optimization Results</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 40px;
             text-align: center;
+            margin-top: 50px;
         }
-        .message {
-            margin-top: 20px;
-        }
-        .download {
-            margin-top: 20px;
-        }
-        a {
-            background-color: #28a745;
-            color: white;
-            text-decoration: none;
-            padding: 10px 20px;
+        .btn {
             display: inline-block;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: white;
+            background-color: green;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            margin-top: 20px;
             border-radius: 5px;
         }
-        a:hover {
-            background-color: #218838;
+        .btn:hover {
+            background-color: darkgreen;
         }
     </style>
 </head>
 <body>
-    <h2>Optimization Results</h2>
-
+    <h1>Optimization Results</h1>
+    
     {% if error_message %}
-        <p class="message" style="color: red;">{{ error_message }}</p>
+        <p style="color: red;">{{ error_message }}</p>
     {% else %}
-        <p class="message">Optimization completed successfully!</p>
+        <p>Optimization completed successfully!</p>
         <p>Execution Time: {{ exec_time }} seconds</p>
-        <div class="download">
-            <a href="{{ download_link }}">Download Results</a>
-        </div>
+        <a href="{{ download_link }}" class="btn" download>Download Results</a>
     {% endif %}
 </body>
 </html>
-
