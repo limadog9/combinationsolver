@@ -37,8 +37,28 @@
         <p>Optimization completed successfully!</p>
         <p>Execution Time: {{ exec_time }} seconds</p>
         
-        <!-- Direct Download Button -->
-        <a id="download-btn" href="{{ download_link }}" class="btn" download>Download Results</a>
+        <!-- Forcefully set the correct download link -->
+        <a id="download-btn" href="{{ download_link }}" class="btn" download="solution.xlsx">Download Results</a>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                let downloadBtn = document.getElementById("download-btn");
+                let downloadUrl = "{{ download_link }}";
+                
+                // Debugging Output
+                console.log("Download Link:", downloadUrl);
+
+                if (!downloadUrl || downloadUrl === "") {
+                    console.error("❌ Download link is empty!");
+                    alert("Error: No file available for download.");
+                } else {
+                    downloadBtn.addEventListener("click", function(event) {
+                        event.preventDefault();
+                        window.location.href = downloadUrl;
+                    });
+                }
+            });
+        </script>
     {% endif %}
 </body>
 </html>
