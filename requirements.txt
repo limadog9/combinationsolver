@@ -4,3 +4,4 @@ gunicorn==20.1.0
 xlsxwriter==3.0.3
 ortools==9.6.2534
 werkzeug==2.2.3
+numpy>=1.23.0,<1.26.0
