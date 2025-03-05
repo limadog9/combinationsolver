@@ -1,69 +1,73 @@
-from flask import Flask, request, render_template, send_file, url_for
+from flask import Flask, request, render_template, send_file
 import pandas as pd
+import ortools.sat.python.cp_model as cp_model
 import os
-import time
-from ortools.sat.python import cp_model
 
-app = Flask(__name__)
-
-RESULTS_FOLDER = "results"
-os.makedirs(RESULTS_FOLDER, exist_ok=True)
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/process', methods=['POST'])
-def process():
-    start_time = time.time()
-
-    file = request.files['file']
-    target_sum = float(request.form['target_sum'])
-    tolerance = float(request.form['tolerance'])
-    max_combination_size = int(request.form['max_combination_size'])
-    max_solutions = int(request.form['max_solutions'])
-    solver_timeout = float(request.form['solver_timeout'])
-
-    df = pd.read_excel(file)
-    numbers = df.iloc[:, 0].tolist()
-
+def find_combinations(numbers, target, max_numbers, tolerance):
     model = cp_model.CpModel()
+    n = len(numbers)
+    
+    # Boolean variables for selection
+    selection = [model.NewBoolVar(f'select_{i}') for i in range(n)]
+    
+    # Constraint: Sum of selected numbers should be within tolerance of target
+    model.Add(sum(numbers[i] * selection[i] for i in range(n)) >= target - tolerance)
+    model.Add(sum(numbers[i] * selection[i] for i in range(n)) <= target + tolerance)
+    
+    # Constraint: Limit the number of selected numbers
+    model.Add(sum(selection) <= max_numbers)
+    
+    # Solver
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = solver_timeout
-
-    selection_vars = [model.NewBoolVar(f'x_{i}') for i in range(len(numbers))]
-
-    model.Add(sum(numbers[i] * selection_vars[i] for i in range(len(numbers))) >= target_sum - tolerance)
-    model.Add(sum(numbers[i] * selection_vars[i] for i in range(len(numbers))) <= target_sum + tolerance)
-    model.Add(sum(selection_vars) <= max_combination_size)
-
-    class SolutionPrinter(cp_model.CpSolverSolutionCallback):
-        def __init__(self, selection_vars, numbers):
-            cp_model.CpSolverSolutionCallback.__init__(self)
-            self.selection_vars = selection_vars
+    solution_list = []
+    class SolutionCollector(cp_model.CpSolverSolutionCallback):
+        def __init__(self, selection, numbers):
+            super().__init__()
+            self.selection = selection
             self.numbers = numbers
             self.solutions = []
+        
+        def OnSolutionCallback(self):
+            selected = [self.numbers[i] for i in range(len(self.numbers)) if self.Value(self.selection[i])]
+            self.solutions.append(selected)
+    
+    collector = SolutionCollector(selection, numbers)
+    solver.SearchForAllSolutions(model, collector)
+    
+    return collector.solutions
 
-        def on_solution_callback(self):
-            solution = [self.numbers[i] for i in range(len(self.numbers)) if self.Value(self.selection_vars[i])]
-            self.solutions.append(solution)
-            if len(self.solutions) >= max_solutions:
-                self.StopSearch()
+app = Flask(__name__)
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-    solution_printer = SolutionPrinter(selection_vars, numbers)
-    solver.SearchForAllSolutions(model, solution_printer)
-
-    result_filename = os.path.join(RESULTS_FOLDER, "solution.xlsx")
-    with pd.ExcelWriter(result_filename, engine="xlsxwriter") as writer:
-        for idx, solution in enumerate(solution_printer.solutions):
-            pd.DataFrame(solution, columns=["Solution Values"]).to_excel(writer, sheet_name=f'Solution {idx + 1}', index=False)
-
-    execution_time = round(time.time() - start_time, 4)
-    return render_template('result.html', execution_time=execution_time, download_link=url_for('download_file', filename="solution.xlsx", _external=True))
-
-@app.route('/download/<filename>')
-def download_file(filename):
-    return send_file(os.path.join(RESULTS_FOLDER, filename), as_attachment=True)
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        file = request.files['file']
+        target = float(request.form['target'])
+        max_numbers = int(request.form['max_numbers'])
+        tolerance = float(request.form['tolerance'])
+        column_name = request.form['column']
+        
+        if file:
+            file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+            file.save(file_path)
+            df = pd.read_excel(file_path)
+            
+            if column_name not in df.columns:
+                return "Invalid column selected. Please try again."
+            
+            numbers = df[column_name].dropna().tolist()
+            solutions = find_combinations(numbers, target, max_numbers, tolerance)
+            
+            # Save results to an Excel file
+            result_df = pd.DataFrame({f'Solution {i+1}': solution for i, solution in enumerate(solutions)})
+            output_path = os.path.join(UPLOAD_FOLDER, 'solutions.xlsx')
+            result_df.to_excel(output_path, index=False)
+            
+            return send_file(output_path, as_attachment=True)
+    
+    return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    app.run(debug=True)
