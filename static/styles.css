@@ -28,6 +28,19 @@ h1 {
     margin-bottom: 20px;
 }
 
+/* Form Input Alignment */
+.form-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
 /* Text */
 p {
     font-size: 14px;
@@ -42,7 +55,7 @@ p {
     margin-top: 20px;
 }
 
-.button {
+button, .button {
     background-color: #1A73E8;
     color: white;
     text-decoration: none;
@@ -54,7 +67,7 @@ p {
     transition: background 0.2s ease-in-out;
 }
 
-.button:hover {
+button:hover, .button:hover {
     background-color: #1558C2;
 }
 

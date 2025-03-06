@@ -1,5 +1,6 @@
 function addConstraint() {
     let div = document.createElement("div");
+    div.className = "form-group";
     div.innerHTML = `
         <select name="constraint_column[]">
             <option value="">Select Column</option>

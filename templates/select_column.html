@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Select Column</title>
+    <title>Select Data Column</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
@@ -12,27 +12,34 @@
         <form action="/process" method="POST">
             <input type="hidden" name="file_path" value="{{ file_path }}">
 
-            <label for="selected_column">Select a Column:</label>
-            <select name="selected_column" required>
-                {% for column in columns %}
-                    <option value="{{ column }}">{{ column }}</option>
-                {% endfor %}
-            </select>
-
-            <label for="max_combination_size">Max Combination Size:</label>
-            <input type="number" name="max_combination_size" required>
-
-            <label for="target_sum">Target Sum:</label>
-            <input type="text" name="target_sum" required>
-
-            <label for="tolerance">Tolerance:</label>
-            <input type="text" name="tolerance" required>
-
-            <h3>Optional Constraints</h3>
-            <div id="constraints">
-                <button type="button" onclick="addConstraint()">➕ Add Constraint</button>
+            <div class="form-group">
+                <label for="selected_column">Select a Column:</label>
+                <select name="selected_column" required>
+                    {% for column in columns %}
+                        <option value="{{ column }}">{{ column }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
+            <div class="form-group">
+                <label for="max_combination_size">Max Combination Size:</label>
+                <input type="number" name="max_combination_size" required>
+            </div>
+
+            <div class="form-group">
+                <label for="target_sum">Target Sum:</label>
+                <input type="text" name="target_sum" required>
+            </div>
+
+            <div class="form-group">
+                <label for="tolerance">Tolerance:</label>
+                <input type="text" name="tolerance" required>
+            </div>
+
+            <h3>Optional Constraints</h3>
+            <div id="constraints"></div>
+
+            <button type="button" onclick="addConstraint()">➕ Add Constraint</button>
             <button type="submit">Find Combinations</button>
         </form>
     </div>
