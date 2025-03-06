@@ -15,7 +15,7 @@ function addConstraint() {
             <option value="!=">!=</option>
         </select>
         <input type="text" name="constraint_value[]" placeholder="Enter Value">
-        <button type="button" onclick="removeConstraint(this)">❌ Remove</button>
+        <button type="button" class="remove-btn" onclick="removeConstraint(this)">❌ Remove</button>
     `;
     document.getElementById("constraints").appendChild(div);
 }
