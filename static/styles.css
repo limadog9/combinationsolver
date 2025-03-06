@@ -21,11 +21,13 @@ body {
     text-align: center;
 }
 
-/* Headings */
-h1 {
-    font-size: 24px;
-    color: #202124;
-    margin-bottom: 20px;
+/* File Upload Styling */
+.upload-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
 }
 
 /* Form Input Alignment */
@@ -41,43 +43,39 @@ h1 {
     margin-bottom: 5px;
 }
 
-/* Text */
-p {
-    font-size: 14px;
-    color: #5F6368;
-}
-
 /* Buttons */
 .button-group {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    gap: 10px;
+    justify-content: center;
     margin-top: 20px;
 }
 
-button, .button {
+button {
     background-color: #1A73E8;
     color: white;
-    text-decoration: none;
-    padding: 12px;
+    border: none;
+    padding: 10px 15px;
     border-radius: 5px;
     font-size: 14px;
-    display: block;
-    text-align: center;
+    cursor: pointer;
     transition: background 0.2s ease-in-out;
 }
 
-button:hover, .button:hover {
+button:hover {
     background-color: #1558C2;
 }
 
-.button.secondary {
-    background-color: #F1F3F4;
-    color: #202124;
+.remove-btn {
+    background: #FF6B6B;
+    padding: 8px;
+    font-size: 12px;
+    border-radius: 5px;
+    cursor: pointer;
 }
 
-.button.secondary:hover {
-    background-color: #E8EAED;
+.remove-btn:hover {
+    background: #E63946;
 }
 
 /* Error Message */
