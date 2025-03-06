@@ -4,61 +4,86 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Select Column</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            text-align: center;
-        }
-        form {
-            display: inline-block;
-            text-align: left;
-            margin-top: 20px;
-        }
-        label, input, select {
-            display: block;
-            margin-bottom: 10px;
-        }
-        button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-    </style>
 </head>
 <body>
-    <h2>Select Column for Optimization</h2>
-    <form action="/process" method="post">
+    <h2>Select the Column for Combination Solver</h2>
+    <form action="/process" method="POST">
         <input type="hidden" name="file_path" value="{{ file_path }}">
-        
-        <label for="selected_column">Choose a Column:</label>
+
+        <label for="selected_column">Select a Column:</label>
         <select name="selected_column" required>
             {% for column in columns %}
                 <option value="{{ column }}">{{ column }}</option>
             {% endfor %}
         </select>
+        <br><br>
 
         <label for="max_combination_size">Max Combination Size:</label>
-        <input type="number" name="max_combination_size" min="1" required>
+        <input type="number" name="max_combination_size" required>
+        <br><br>
 
         <label for="target_sum">Target Sum:</label>
-        <input type="number" name="target_sum" step="any" required>
+        <input type="text" name="target_sum" required>
+        <br><br>
 
         <label for="tolerance">Tolerance:</label>
-        <input type="number" name="tolerance" step="any" required>
+        <input type="text" name="tolerance" required>
+        <br><br>
 
-        <label for="max_solutions">Max Number of Solutions:</label>
-        <input type="number" name="max_solutions" min="1" required>
+        <h3>Optional: Apply Constraints</h3>
+        <div id="constraints">
+            <div>
+                <select name="constraint_column[]">
+                    <option value="">Select Column</option>
+                    {% for column in columns %}
+                        <option value="{{ column }}">{{ column }}</option>
+                    {% endfor %}
+                </select>
+                <select name="constraint_operator[]">
+                    <option value="=">=</option>
+                    <option value="<"><</option>
+                    <option value=">">></option>
+                    <option value="<="><=</option>
+                    <option value=">=">>=</option>
+                    <option value="!=">!=</option>
+                </select>
+                <input type="text" name="constraint_value[]" placeholder="Enter Value">
+                <button type="button" onclick="removeConstraint(this)">Remove</button>
+            </div>
+        </div>
+        <button type="button" onclick="addConstraint()">Add Constraint</button>
+        <br><br>
 
-        <label for="solver_timeout">Solver Timeout (seconds):</label>
-        <input type="number" name="solver_timeout" min="1" max="60" value="10" required>
-
-        <button type="submit">Run Optimization</button>
+        <button type="submit">Find Combinations</button>
     </form>
+
+    <script>
+        function addConstraint() {
+            var div = document.createElement("div");
+            div.innerHTML = `
+                <select name="constraint_column[]">
+                    <option value="">Select Column</option>
+                    {% for column in columns %}
+                        <option value="{{ column }}">{{ column }}</option>
+                    {% endfor %}
+                </select>
+                <select name="constraint_operator[]">
+                    <option value="=">=</option>
+                    <option value="<"><</option>
+                    <option value=">">></option>
+                    <option value="<="><=</option>
+                    <option value=">=">>=</option>
+                    <option value="!=">!=</option>
+                </select>
+                <input type="text" name="constraint_value[]" placeholder="Enter Value">
+                <button type="button" onclick="removeConstraint(this)">Remove</button>
+            `;
+            document.getElementById("constraints").appendChild(div);
+        }
+
+        function removeConstraint(button) {
+            button.parentNode.remove();
+        }
+    </script>
 </body>
 </html>

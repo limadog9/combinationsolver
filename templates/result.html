@@ -3,42 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optimization Results</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 50px;
-        }
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            font-size: 16px;
-            font-weight: bold;
-            color: white;
-            background-color: #0b800b;
-            border: none;
-            text-decoration: none;
-            cursor: pointer;
-            border-radius: 5px;
-            margin-top: 20px;
-        }
-        .btn:hover {
-            background-color: #065f06;
-        }
-    </style>
+    <title>Results</title>
 </head>
 <body>
+    <h2>Combination Solver Results</h2>
 
-    <h1>Optimization Results</h1>
-    <p>Optimization completed successfully!</p>
-    <p>Execution Time: {{ exec_time if exec_time else 'Check logs for time' }} seconds</p>
-
-    {% if download_link %}
-        <a id="download-btn" href="{{ download_link }}" class="btn" download="solution.xlsx">Download Results</a>
+    {% if error_message %}
+        <p style="color: red;">{{ error_message }}</p>
     {% else %}
-        <p style="color: red;">No results file generated.</p>
+        <p><strong>Achieved Sum:</strong> {{ achieved_sum }}</p>
+        <p><strong>Execution Time:</strong> {{ exec_time }} seconds</p>
+        <a href="{{ download_link }}">Download Results</a>
     {% endif %}
 
+    <br><br>
+    <a href="/">Go Back</a>
 </body>
 </html>

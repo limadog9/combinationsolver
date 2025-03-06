@@ -1,74 +1,146 @@
-from flask import Flask, request, render_template, send_file
+from flask import Flask, request, render_template, send_file, url_for
+from ortools.sat.python import cp_model
 import pandas as pd
-import ortools.sat.python.cp_model as cp_model
+import time
 import os
+import tempfile
 
-def find_combinations(numbers, target, max_numbers, tolerance):
-    model = cp_model.CpModel()
-    n = len(numbers)
-    
-    # Boolean variables for selection
-    selection = [model.NewBoolVar(f'select_{i}') for i in range(n)]
-    
-    # Constraint: Sum of selected numbers should be within tolerance of target
-    model.Add(sum(numbers[i] * selection[i] for i in range(n)) >= target - tolerance)
-    model.Add(sum(numbers[i] * selection[i] for i in range(n)) <= target + tolerance)
-    
-    # Constraint: Limit the number of selected numbers
-    model.Add(sum(selection) <= max_numbers)
-    
-    # Solver
-    solver = cp_model.CpSolver()
-    solution_list = []
-    
-    class SolutionCollector(cp_model.CpSolverSolutionCallback):
-        def __init__(self, selection, numbers):
-            super().__init__()
-            self.selection = selection
-            self.numbers = numbers
-            self.solutions = []
-        
-        def OnSolutionCallback(self):
-            selected = [self.numbers[i] for i in range(len(self.numbers)) if self.Value(self.selection[i])]
-            self.solutions.append(selected)
-    
-    collector = SolutionCollector(selection, numbers)
-    solver.SearchForAllSolutions(model, collector)
-    
-    return collector.solutions
-
+# Initialize Flask
 app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.route('/', methods=['GET', 'POST'])
+# Use temporary folders for uploads and results
+UPLOAD_FOLDER = tempfile.mkdtemp()
+RESULTS_FOLDER = tempfile.mkdtemp()
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    if request.method == 'POST':
-        file = request.files['file']
-        target = float(request.form['target'])
-        max_numbers = int(request.form['max_numbers'])
-        tolerance = float(request.form['tolerance'])
-        column_name = request.form['column']
+    if request.method == "POST":
+        if "file" not in request.files:
+            return "No file uploaded", 400
+        file = request.files["file"]
         
-        if file:
-            file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-            file.save(file_path)
-            df = pd.read_excel(file_path)
-            
-            if column_name not in df.columns:
-                return "Invalid column selected. Please try again."
-            
-            numbers = df[column_name].dropna().tolist()
-            solutions = find_combinations(numbers, target, max_numbers, tolerance)
-            
-            # Save results to an Excel file
-            result_df = pd.DataFrame({f'Solution {i+1}': solution for i, solution in enumerate(solutions)})
-            output_path = os.path.join(UPLOAD_FOLDER, 'solutions.xlsx')
-            result_df.to_excel(output_path, index=False)
-            
-            return send_file(output_path, as_attachment=True)
-    
-    return render_template('index.html')
+        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(file_path)
 
-if __name__ == '__main__':
-    app.run(debug=True)
+        df = pd.read_excel(file_path)
+
+        # Filter out unnamed columns
+        valid_columns = [col for col in df.columns if not col.startswith("Unnamed")]
+
+        return render_template("select_column.html", columns=valid_columns, file_path=file_path)
+
+    return render_template("index.html")
+
+@app.route("/process", methods=["POST"])
+def process():
+    file_path = request.form["file_path"]
+    selected_column = request.form["selected_column"]
+    max_combination_size = request.form["max_combination_size"]
+    target_sum = request.form["target_sum"]
+    tolerance = request.form["tolerance"]
+
+    # Convert user input to correct types
+    try:
+        max_combination_size = int(max_combination_size)
+        target_sum = float(target_sum)
+        tolerance = float(tolerance)
+    except ValueError:
+        return "Invalid input for max combination size, target sum, or tolerance.", 400
+
+    df = pd.read_excel(file_path)
+
+    if selected_column not in df.columns:
+        return "Invalid column selection", 400
+
+    # Read static constraints from the form
+    constraint_columns = request.form.getlist("constraint_column[]")
+    constraint_operators = request.form.getlist("constraint_operator[]")
+    constraint_values = request.form.getlist("constraint_value[]")
+
+    # Apply constraints dynamically
+    for col, op, val in zip(constraint_columns, constraint_operators, constraint_values):
+        if col and val:
+            try:
+                val = float(val) if val.replace('.', '', 1).isdigit() else val
+
+                if op == "=":
+                    df = df[df[col] == val]
+                elif op == "<":
+                    df = df[df[col] < val]
+                elif op == ">":
+                    df = df[df[col] > val]
+                elif op == "<=":
+                    df = df[df[col] <= val]
+                elif op == ">=":
+                    df = df[df[col] >= val]
+                elif op == "!=":
+                    df = df[df[col] != val]
+            except ValueError:
+                return f"Invalid constraint value for {col}", 400
+
+    # Extract numbers for optimization
+    nums = df[selected_column].dropna().tolist()
+
+    # Debug: Print information before optimization
+    print(f"Target sum: {target_sum}, Tolerance: {tolerance}")
+    print(f"Max combination size: {max_combination_size}")
+    print(f"Filtered dataset size: {len(nums)}")
+
+    model = cp_model.CpModel()
+    x = [model.NewBoolVar(f"x{i}") for i in range(len(nums))]
+
+    # Ensure Scaling Factor is Consistent
+    scaling_factor = 100
+    int_nums = [int(num * scaling_factor) for num in nums]
+    int_target_sum = int(target_sum * scaling_factor)
+    int_tolerance = int(tolerance * scaling_factor)
+
+    total_sum = sum(x[i] * int_nums[i] for i in range(len(int_nums)))
+
+    model.Add(total_sum >= int_target_sum - int_tolerance)
+    model.Add(total_sum <= int_target_sum + int_tolerance)
+
+    model.Add(sum(x) <= max_combination_size)
+    model.Minimize(sum(x))
+
+    solver = cp_model.CpSolver()
+    
+    # **Set a solver timeout to prevent Render from killing the process**
+    solver.parameters.max_time_in_seconds = 10.0
+
+    start_time = time.time()
+    status = solver.Solve(model)
+    end_time = time.time()
+
+    print(f"Solver status: {solver.StatusName(status)}, Time used: {solver.WallTime()}s")  # Debugging
+
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        solution = [nums[i] for i in range(len(nums)) if solver.Value(x[i]) == 1]
+        achieved_sum = sum(solution)
+        exec_time = round(end_time - start_time, 4)
+
+        selected_rows = df[df[selected_column].isin(solution)]
+
+        result_filename = os.path.join(RESULTS_FOLDER, "solution.xlsx")
+        selected_rows.to_excel(result_filename, index=False)
+
+        return render_template(
+            "result.html",
+            achieved_sum=achieved_sum,
+            exec_time=exec_time,
+            download_link=url_for("download_file", filename="solution.xlsx", _external=True),
+        )
+    else:
+        return render_template("result.html", error_message="No valid solution found.")
+
+@app.route("/download/<filename>")
+def download_file(filename):
+    file_path = os.path.join(RESULTS_FOLDER, filename)
+
+    if not os.path.exists(file_path):
+        return "File not found", 404
+
+    return send_file(file_path, as_attachment=True)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
