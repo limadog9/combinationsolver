@@ -9,16 +9,18 @@
 <body>
     <div class="container">
         <h1>✅ Results</h1>
+        
         {% if error_message %}
             <p class="error">{{ error_message }}</p>
         {% else %}
             <p><strong>Achieved Sum:</strong> {{ achieved_sum }}</p>
             <p><strong>Execution Time:</strong> {{ exec_time }} seconds</p>
-            <a href="{{ download_link }}" class="button">⬇ Download Results</a>
+            
+            <div class="download-container">
+                <a href="{{ download_link }}" class="button">⬇ Download Results</a>
+                <a href="/" class="button">🔄 Go Back</a>
+            </div>
         {% endif %}
-
-        <br>
-        <a href="/" class="button">🔄 Go Back</a>
     </div>
 </body>
 </html>
