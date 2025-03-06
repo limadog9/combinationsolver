@@ -4,19 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h2>Combination Solver Results</h2>
+    <div class="container">
+        <h1>✅ Results</h1>
+        {% if error_message %}
+            <p class="error">{{ error_message }}</p>
+        {% else %}
+            <p><strong>Achieved Sum:</strong> {{ achieved_sum }}</p>
+            <p><strong>Execution Time:</strong> {{ exec_time }} seconds</p>
+            <a href="{{ download_link }}" class="button">⬇ Download Results</a>
+        {% endif %}
 
-    {% if error_message %}
-        <p style="color: red;">{{ error_message }}</p>
-    {% else %}
-        <p><strong>Achieved Sum:</strong> {{ achieved_sum }}</p>
-        <p><strong>Execution Time:</strong> {{ exec_time }} seconds</p>
-        <a href="{{ download_link }}">Download Results</a>
-    {% endif %}
-
-    <br><br>
-    <a href="/">Go Back</a>
+        <br>
+        <a href="/" class="button">🔄 Go Back</a>
+    </div>
 </body>
 </html>
